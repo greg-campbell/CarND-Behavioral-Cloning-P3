@@ -19,6 +19,12 @@ def draw(img, title = '', color = cv2.COLOR_BGR2RGB):
     display(f)
     plt.close(f)
 
+def read_row(row):
+  img = read_image(row['center'][0])
+  angle = row['steering'][0]
+  return preprocess(img), angle
+  
+
 def read_image(path):
     return cv2.imread('./data/' + path)
 
@@ -34,26 +40,32 @@ height, width, channels = test_image.shape
 print("Image dimensions:" , width, height)
 
 def crop_image(img, x, y, w, h):
-    y2 = y+h
-    x2 = x+w
-    return img[y:y2, x:x2]
-
+   return img[y:y+h,:] 
+#def crop_image(img, x, y, w, h):
+#    y2 = y+h
+#    x2 = x+w
+#    return img[y:y2, x:x2]
+#
 def resize_image(img, width, height):
     return cv2.resize(img, (width, height), interpolation=cv2.INTER_AREA)
 
 def preprocess(img):
-    return resize_image(crop_image(img, 0, 50, width, 80), 200, 66)
-
+    return resize_image(crop_image(img, 0, 40, 320, 40), 200, 66 )
+#
 preprocessed = preprocess(test_image)
+print(preprocessed.shape)
 #draw(preprocessed, "After preprocessing (crop + resize)")
 
 from keras.models import Sequential
 from keras.layers.core import Activation, Dense, Dropout, Flatten
 #from keras.activations import relu
 from keras.layers.convolutional import Convolution2D
+from keras.layers import Cropping2D, Lambda
 
 model = Sequential()
-model.add(Convolution2D(24, 5, 5, subsample=(2,2), input_shape=preprocessed.shape))
+model.add(Lambda(lambda x: (x / 255.0) - 0.5, input_shape=preprocessed.shape))
+#model.add(Cropping2D(cropping=((20, 10), (0, 0)), input_shape=preprocessed.shape))
+model.add(Convolution2D(24, 5, 5, subsample=(2,2)))
 model.add(Activation('relu'))
 model.add(Convolution2D(36, 5, 5, subsample=(2,2)))
 model.add(Activation('relu'))
@@ -87,20 +99,21 @@ def generate_batch_from_data(data, size = 32):
     while 1:
         for i in range(size):
             row = data.iloc[[np.random.randint(len(data))]].reset_index()
-            images[i] = preprocess(read_image(row['center'][0]))
-            steering_angles[i] = row['steering'][0]
+            x,y = read_row(row)
+            images[i] = x
+            steering_angles[i] = y
         yield images, steering_angles
-
 
 
 model.compile('adam', 'mean_squared_error', ['mean_squared_error'])
 
 history = model.fit_generator(generate_batch_from_data(data_train),
-                              samples_per_epoch=10000, nb_epoch=5,
+                              samples_per_epoch=32*len(data_train)//32, nb_epoch=5,
                               validation_data = generate_batch_from_data(data_val),
-                              nb_val_samples = 2048,
+                              nb_val_samples = len(data_val),
                               verbose = 2)
 
-with open('model.json', 'w') as json:
-    json.write(model.to_json())
-model.save_weights('model.h5')
+#with open('model.json', 'w') as json:
+#    json.write(model.to_json())
+#model.save_weights('model.h5')
+model.save('model.h5')
