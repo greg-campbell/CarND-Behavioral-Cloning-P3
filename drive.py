@@ -20,6 +20,21 @@ sio = socketio.Server()
 app = Flask(__name__)
 model = None
 prev_image_array = None
+gx = 0.0
+gy = 0.0
+
+import cv2
+import math
+def crop_image(img, y1, y2):
+   #return img[y1:y2,:]
+   return img
+
+def resize_image(img, width, height):
+    return cv2.resize(img, (width, height), interpolation=cv2.INTER_AREA)
+
+def preprocess(img):
+    return resize_image(crop_image(img, 53, 128), 64, 32 )
+
 
 
 class SimplePIController:
@@ -42,15 +57,63 @@ class SimplePIController:
 
         return self.Kp * self.error + self.Ki * self.integral
 
+import numpy as np
+import matplotlib.pyplot as plt
+import time
 
 controller = SimplePIController(0.1, 0.002)
-set_speed = 9
+set_speed = 20 
 controller.set_desired(set_speed)
+class Point:
+  def __init__(self):
+    self.x = 0.0
+    self.y = 0.0
+    self.bearing = 0.0
+    self.t = time.time()
+    self.xs = []
+    self.ys = []
+    self.speeds = []
+    self.angles = []
+    self.bearings = []
+  
+  def move(self, angle, speed):
+    time_elapsed = time.time() - self.t
+    self.t += time_elapsed
+    #self.y += time_elapsed * speed * math.sin(math.radians(self.bearing))
+    #self.x += time_elapsed * speed * math.cos(math.radians(self.bearing))
+    self.y += math.sin(math.radians(self.bearing))
+    self.x += math.cos(math.radians(self.bearing))
+    self.xs.extend([self.x])
+    self.ys.extend([self.y])
+    self.speeds.extend([speed])
+    self.angles.extend([angle])
+    self.bearing += angle
+    self.bearings.extend([self.bearing])
+    return self.x, self.y
 
+  def printpt(self):
+    print("Point", self.x, self.y)
+
+  def plot(self):
+    plt.plot(self.xs, self.ys)
+    plt.axis('equal')
+    plt.show()
+
+    plt.plot(self.speeds)
+    plt.show()
+
+    plt.plot(self.angles)
+    plt.show()
+
+    plt.plot(self.bearings)
+    plt.show()
+
+point = Point()
 
 @sio.on('telemetry')
 def telemetry(sid, data):
     if data:
+
         # The current steering angle of the car
         steering_angle = data["steering_angle"]
         # The current throttle of the car
@@ -60,12 +123,23 @@ def telemetry(sid, data):
         # The current image from the center camera of the car
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
-        image_array = np.asarray(image)
+        image_array = preprocess(np.asarray(image))
+
+        #point.move(float(steering_angle), float(speed))
+        print("In:", steering_angle, throttle, speed)
+
         steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
 
         throttle = controller.update(float(speed))
+        #throttle = max(0.05, -abs(steering_angle) + 0.35)
 
-        print(steering_angle, throttle)
+        #if abs(steering_angle) > 0.1 and float(speed) > 5:
+        #  throttle =  - float(speed) / 2 + 0.9
+
+        #if abs(steering_angle) > 0.25:
+        #  steering_angle *= 2.5
+
+        print(math.degrees(steering_angle), throttle)
         send_control(steering_angle, throttle)
 
         # save frame
@@ -74,6 +148,7 @@ def telemetry(sid, data):
             image_filename = os.path.join(args.image_folder, timestamp)
             image.save('{}.jpg'.format(image_filename))
     else:
+        #point.plot()
         # NOTE: DON'T EDIT THIS.
         sio.emit('manual', data={}, skip_sid=True)
 
@@ -85,6 +160,7 @@ def connect(sid, environ):
 
 
 def send_control(steering_angle, throttle):
+    #print("Sending {} and {}".format(steering_angle, throttle))
     sio.emit(
         "steer",
         data={

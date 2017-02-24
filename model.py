@@ -2,8 +2,6 @@ import numpy as np
 import pandas as pd
 import cv2
 
-### Data exploration visualization goes here.
-### Feel free to use as many code cells as needed.
 import matplotlib.pyplot as plt
 from IPython.display import display as display
 from IPython.core.pylabtools import figsize, getfigs
@@ -22,11 +20,11 @@ def draw(img, title = '', filename='', color = cv2.COLOR_BGR2RGB):
     plt.close(f)
 
 def read_row(row):
-  img = read_image(row['center'][0])
+  img = read_image(row['center'][0].strip())
   angle = row['steering'][0]
-  if 1 == np.random.randint(2):
-      img = cv2.flip(img, 1)
-      angle = -angle
+  #if 1 == np.random.randint(2):
+  #    img = cv2.flip(img, 1)
+  #    angle = -angle
   return preprocess(img), angle
 
 def augment_row(row):
@@ -43,6 +41,22 @@ def augment_row(row):
 
 def read_image(path):
     return cv2.imread('./data/' + path)
+
+row_angles = []
+from numpy.random import choice
+def prepare_row_angles(rows):
+    for angle in rows:
+        row_angles.extend([angle])
+    hist, bin_edges = np.histogram(row_angles)
+    hist_vals = [hist[np.searchsorted(bin_edges, row_angles[i])-1] for i in range(len(row_angles))]
+    ps = [1/x for x in hist_vals]
+    #ps = [hist_vals[i] * (abs(row_angles[i]) + 1.0) for i in range(len(row_angles))]
+    pps = [x/sum(ps) for x in ps]
+    return pps
+
+def uniform_select_row_num(n):
+   draw = choice([i for i in range(len(row_angles))], n)#, p=pps)
+   return draw
 
 # Read in the driving log CSV
 driving_log = pd.read_csv('./data/driving_log.csv')
@@ -63,7 +77,7 @@ def resize_image(img, width, height):
     return cv2.resize(img, (width, height), interpolation=cv2.INTER_AREA)
 
 def preprocess(img):
-    return resize_image(crop_image(img, 53, 128), 32, 16 )
+    return resize_image(crop_image(img, 53, 128), 64, 32 )
 
 preprocessed = preprocess(test_image)
 print(preprocessed.shape)
@@ -72,47 +86,39 @@ print(preprocessed.shape)
 from keras.models import Sequential
 from keras.layers.core import Activation, Dense, Dropout, Flatten
 #from keras.activations import relu
-from keras.layers.convolutional import Convolution2D
+from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.layers import Cropping2D, Lambda
 
 model = Sequential()
-model.add(Lambda(lambda x: (x / 255.0) - 0.5, input_shape=preprocessed.shape))
-#model.add(Cropping2D(cropping=((20, 10), (0, 0)), input_shape=preprocessed.shape))
-model.add(Convolution2D(24, 5, 5, subsample=(2,2)))
-model.add(Activation('relu'))
-#model.add(Convolution2D(36, 5, 5, subsample=(2,2)))
-model.add(Activation('relu'))
-model.add(Convolution2D(48, 3, 3))
-model.add(Dropout(0.5))
-model.add(Activation('relu'))
-#model.add(Convolution2D(64, 3, 3))
-#model.add(Activation('relu'))
-#model.add(Convolution2D(64, 3, 3))
-#model.add(Activation('relu'))
-#model.add(Dropout(0.5))
-#model.add(Activation('relu'))
+model.add(Lambda(lambda x: (x / 127.5) - 1.0, input_shape=preprocessed.shape))
+model.add(Cropping2D(cropping=((10, 4), (0, 0)), input_shape=preprocessed.shape))
+model.add(Convolution2D(64, 2, 2, border_mode='same', activation='relu'))#,input_shape=(16,32,3)))
+model.add(MaxPooling2D((2, 2)))
+model.add(Convolution2D(32, 3, 3, border_mode='same',activation='relu'))
+model.add(MaxPooling2D((2, 2)))
 model.add(Flatten())
-model.add(Dense(1024))
-model.add(Dropout(0.5))
-model.add(Activation('relu'))
-model.add(Dense(128))
-model.add(Activation('relu'))
-model.add(Dense(64))
-model.add(Activation('relu'))
-model.add(Dense(16))
-model.add(Activation('relu'))
+model.add(Dropout(0.3))
+model.add(Dense(1024, activation='relu'))
+model.add(Dense(100, activation='relu'))
+model.add(Dense(50, activation='relu'))
+model.add(Dense(10, activation='relu'))
+model.add(Dropout(0.3))
 model.add(Dense(1))
 
 from sklearn.model_selection import train_test_split
 data_train, data_val = train_test_split(driving_log)
 
-def generate_batch_from_data(data, size = 32):
+def generate_batch_from_data(data, filter_probability, size = 1024):
     images = np.zeros((size, *preprocessed.shape))
     steering_angles = np.zeros(size)
+    row_indices = uniform_select_row_num(size)
     while 1:
         for i in range(size):
-            row = data.iloc[[np.random.randint(len(data))]].reset_index()
-            augment_var = False #np.random.rand() < 0.33
+            row = data.iloc[[row_indices[i]]].reset_index()
+            #if np.random.uniform() < filter_probability:
+            #  while abs(row['steering'][0]) > 0.1: 
+            #    row = data.iloc[[np.random.randint(len(data))]].reset_index()
+            augment_var = np.random.uniform() < 0.3
             if augment_var:
               x,y = augment_row(row)
             else:
@@ -121,15 +127,35 @@ def generate_batch_from_data(data, size = 32):
             steering_angles[i] = y
         yield images, steering_angles
 
+def generate_batch_for_val(data, size = 1024):
+    images = np.zeros((size, *preprocessed.shape))
+    steering_angles = np.zeros(size)
+    while 1:
+        for i in range(size):
+            row = data.iloc[[np.random.randint(len(data))]].reset_index()
+            x,y = read_row(row)
+            images[i] = x
+            steering_angles[i] = y
+        yield images, steering_angles
+
+
 
 model.compile('adam', 'mean_squared_error', ['mean_squared_error'])
+#for epoch in range(5):
+#    filter_probability = 1.0/(1+epoch)
+#    history = model.fit_generator(generate_batch_from_data(data_train, filter_probability),
+#                                  samples_per_epoch=4000,
+#                                  validation_data = generate_batch_for_val(data_val),
+#                                  nb_val_samples=400,
+#                                  nb_epoch=1, verbose=2)
 
-history = model.fit_generator(generate_batch_from_data(data_train),
-                              samples_per_epoch=32*len(data_train)//32, nb_epoch=5,
-                              #samples_per_epoch=20000, nb_epoch=5,
-                              validation_data = generate_batch_from_data(data_val),
+pps = prepare_row_angles(data_train['steering'])
+history = model.fit_generator(generate_batch_from_data(data_train, 0.0),
+                              #samples_per_epoch=32*len(data_train)//32, nb_epoch=10,
+                              samples_per_epoch=len(data_train)*10, nb_epoch=10,
+                              validation_data = generate_batch_for_val(data_val),
                               nb_val_samples = len(data_val),
-                              #nb_val_samples = 2000,
+                              #nb_val_samples = 400,
                               verbose = 2)
 
 model.save('model.h5')
