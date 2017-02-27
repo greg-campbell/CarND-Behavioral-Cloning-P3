@@ -172,15 +172,6 @@ history = model.fit_generator(generate_batch_from_data(data_train),
 
 
 def plot_hist_loss(history):
-    # summarize history for accuracy
-    plt.plot(history.history['acc'])
-    plt.plot(history.history['val_acc'])
-    plt.title('model accuracy')
-    plt.ylabel('accuracy')
-    plt.xlabel('epoch')
-    plt.legend(['train', 'test'], loc='upper left')
-    plt.show()
-    plt.savefig('./img/accuracy.png')
     # summarize history for loss
     plt.plot(history.history['loss'])
     plt.plot(history.history['val_loss'])
