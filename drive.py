@@ -115,7 +115,7 @@ def telemetry(sid, data):
             image.save('{}.jpg'.format(image_filename))
     else:
         # Plot the data on manual control
-        point.plot()
+        #point.plot()
         # NOTE: DON'T EDIT THIS.
         sio.emit('manual', data={}, skip_sid=True)
 

@@ -1,21 +1,5 @@
 #**Behavioral Cloning** 
 
-##Writeup Template
-
-###You can use this file as a template for your writeup if you want to submit it as a markdown file, but feel free to use some other method and submit a pdf if you prefer.
-
----
-
-**Behavrioal Cloning Project**
-
-The goals / steps of this project are the following:
-* Use the simulator to collect data of good driving behavior
-* Build, a convolution neural network in Keras that predicts steering angles from images
-* Train and validate the model with a training and validation set
-* Test that the model successfully drives around track one without leaving the road
-* Summarize the results with a written report
-
-
 [//]: # (Image References)
 
 [image1]: ./img/model.png "Model Visualization"
@@ -24,9 +8,6 @@ The goals / steps of this project are the following:
 [image4]: ./img/preprocessed2.png "Preprocessed (resize and crop)"
 [image5]: ./img/loss.png "Loss"
 [image6]: ./img/steering_angle_hist2.png "Histogram of steering angles"
-
-## Rubric Points
-###Here I will consider the [rubric points](https://review.udacity.com/#!/rubrics/432/view) individually and describe how I addressed each point in my implementation.  
 
 ---
 ###Files Submitted & Code Quality
@@ -126,3 +107,5 @@ The validation set helped determine if the model was over or under fitting. As I
 ![alt text][image5]
 
 I used an adam optimizer so that manually training the learning rate wasn't necessary.
+
+The video good.mp4 shows the car driving on track 1. It is a lot less stable than when running the simulator without recording because I was running it on an ancient 2012 MacBook which can barely even run the simulator at the lowest settings without spontaneously combusting. Apparently trying to save images while running the simulator is a bit too much for it. But at least the car stays on the track.
